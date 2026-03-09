@@ -1,72 +1,142 @@
 #pragma once
+
 #include "const.h"
+
 struct SectionInfo {
+
 	SectionInfo() {}
+
 	~SectionInfo() {
+
 		_section_datas.clear();
+
 	}
+
+
 
 	SectionInfo(const SectionInfo& src) {
+
 		_section_datas = src._section_datas;
+
 	}
 
+
+
 	SectionInfo& operator = (const SectionInfo& src) {
+
 		if (&src == this) {
+
 			return *this;
+
 		}
 
+
+
 		this->_section_datas = src._section_datas;
+
 		return *this;
+
 	}
 
 	std::map<std::string, std::string> _section_datas;
+
 	std::string  operator[](const std::string& key) {
+
 		if (_section_datas.find(key) == _section_datas.end()) {
+
 			return "";
+
 		}
-		// ÕâÀï¿ÉÒÔÌí¼ÓÒ»Ğ©±ß½ç¼ì²é  
+
+		// è¿™é‡Œå¯ä»¥æ·»åŠ ä¸€äº›è¾¹ç•Œæ£€æŸ¥  
+
 		return _section_datas[key];
+
 	}
+
 };
+
 class ConfigMgr
+
 {
+
 public:
-	//Îö¹¹º¯Êı
+
+	//ææ„å‡½æ•°
+
 	~ConfigMgr() {
+
 		_config_map.clear();
+
 	}
-	//sec ĞÅÏ¢
+
+	//sec ä¿¡æ¯
+
 	SectionInfo operator[](const std::string& section) {
+
 		if (_config_map.find(section) == _config_map.end()) {
+
 			return SectionInfo();
+
 		}
+
 		return _config_map[section];
+
 	}
 
 
-	//»ñµÃµ¥Àı
+
+
+
+	//è·å¾—å•ä¾‹
+
 	static ConfigMgr& Inst()
+
 	{
+
 		static ConfigMgr cfg_mgr;
+
 		return cfg_mgr;
+
 	}
 
 
-	//¸³Öµ¹¹Ôì
+
+
+
+	//èµ‹å€¼æ„é€ 
+
 	ConfigMgr& operator=(const ConfigMgr& src) {
+
 		if (&src == this) {
+
 			return *this;
+
 		}
+
 		_config_map = src._config_map;
+
 	};
-	//¿½±´¹¹Ôì
+
+	//æ‹·è´æ„é€ 
+
 	ConfigMgr(const ConfigMgr& src) {
+
 		_config_map = src._config_map;
+
 	}
+
 	
+
 private:
+
 	ConfigMgr();
 
-	// ´æ´¢sectionºÍkey-value¶ÔµÄmap  
+
+
+	// å­˜å‚¨sectionå’Œkey-valueå¯¹çš„map  
+
 	std::map<std::string, SectionInfo> _config_map;
+
 };
+

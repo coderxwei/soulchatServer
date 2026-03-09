@@ -1,71 +1,143 @@
 #pragma once
+
 #include <boost/beast/http.hpp>
+
 #include <boost/beast.hpp>
+
 #include <boost/asio.hpp>
+
 #include <memory>
+
 #include <iostream>
+
 #include <functional>
+
 #include <map>
+
 #include <unordered_map>
+
 #include "Singleton.h"
+
 #include <json/json.h>
+
 #include <json/value.h>
+
 #include <json/reader.h>
-//¶ÁÈ¡ÎÄ¼ş
+
+//è¯»å–æ–‡ä»¶
+
 #include <boost/filesystem.hpp>
+
 #include <boost/property_tree/ptree.hpp>
+
 #include <boost/property_tree/ini_parser.hpp>
+
 #include "ConfigMgr.h"
+
 #include <atomic>
+
 #include "Singleton.h"
+
 #include <queue>
+
 #include <condition_variable>
+
 #include  "hiredis/hiredis.h"
+
 #include <cassert>
+
 #include "RedisConPool.h"
 
+
+
 //#include <mysqlx/xdevapi.h>
+
 //#include <mysql/jdbc/mysql_connection.h>
+
 #include <jdbc/mysql_driver.h>
+
 #include <jdbc/mysql_connection.h>
+
 #include <jdbc/cppconn/prepared_statement.h>
+
 #include <jdbc/cppconn/resultset.h>
+
 #include <jdbc/cppconn/statement.h>
+
 #include <jdbc/cppconn/exception.h>
 
 
+
+
+
 namespace beast = boost::beast;         // from <boost/beast.hpp>
+
 namespace http = beast::http;           // from <boost/beast/http.hpp>
+
 namespace net = boost::asio;            // from <boost/asio.hpp>
+
 using tcp = boost::asio::ip::tcp;       // from <boost/asio/ip/tcp.hpp>
 
+
+
 enum ErrorCodes {
+
 	Success = 0,
-	Error_Json = 1001,  //Json½âÎö´íÎó
-	RPCFailed = 1002,  //RPC ÇëÇó´íÎó
-	VarifyExpired = 1003, // ÑéÖ¤Âğ¹ıÆÚ
-	VarifyCodeErr = 1004, //  ÑéÖ¤Âë´íÎó
-	UserExist = 1005,       //  ÓÃ»§ÒÑ¾­²»´æÔÚ
-	PasswdErr = 1006,    // ÃÜÂë´íÎó
-	EmailNotMatch = 1007,  // ÓÊÏä²»Æ¥Åä
-	PasswdUpFailed = 1008,  //¸üĞÂÃÜÂëÊ§°Ü
-	PasswdInvalid = 1009,   //ÃÜÂë¸üĞÂÊ§°Ü
+
+	Error_Json = 1001,  //Jsonè§£æé”™è¯¯
+
+	RPCFailed = 1002,  //RPC è¯·æ±‚é”™è¯¯
+
+	VarifyExpired = 1003, // éªŒè¯å—è¿‡æœŸ
+
+	VarifyCodeErr = 1004, //  éªŒè¯ç é”™è¯¯
+
+	UserExist = 1005,       //  ç”¨æˆ·å·²ç»ä¸å­˜åœ¨
+
+	PasswdErr = 1006,    // å¯†ç é”™è¯¯
+
+	EmailNotMatch = 1007,  // é‚®ç®±ä¸åŒ¹é…
+
+	PasswdUpFailed = 1008,  //æ›´æ–°å¯†ç å¤±è´¥
+
+	PasswdInvalid = 1009,   //å¯†ç æ›´æ–°å¤±è´¥
+
 	TokenInvalid = 1010,   //
+
 	UidInvalid = 1011,  //
 
+
+
 };
+
 class Defer {
+
 public:
+
 	//
+
 	Defer(std::function<void()> func) : func_(func) {}
+
 	// 
+
 	~Defer() {
+
 		func_();
+
 	}
 
+
+
 private:
+
 	std::function<void()> func_;
+
 };
+
+
+
+
+
 
 
 

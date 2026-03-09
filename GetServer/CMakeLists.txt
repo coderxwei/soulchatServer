@@ -1,22 +1,36 @@
 cmake_minimum_required(VERSION 3.20)
+
+# ==============================================================================
+# vcpkg 工具链（必须在 project() 之前设置）
+# CLion 中也可在 Settings → Build → CMake → CMake options 里设置：
+#   -DCMAKE_TOOLCHAIN_FILE=D:/Vcpkg/vcpkg/scripts/buildsystems/vcpkg.cmake
+# ==============================================================================
+if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
+    set(CMAKE_TOOLCHAIN_FILE "D:/Vcpkg/vcpkg/scripts/buildsystems/vcpkg.cmake"
+        CACHE STRING "vcpkg toolchain file")
+endif()
+set(VCPKG_TARGET_TRIPLET "x64-windows" CACHE STRING "vcpkg triplet")
+
 project(GetServer CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # ==============================================================================
-# 用户可配置的依赖路径（在 CLion 的 CMake 设置中可修改这些缓存变量）
+# 查找 vcpkg 提供的依赖包
 # ==============================================================================
-set(BOOST_ROOT       "D:/cppsoft/boost_1_81_0"
-    CACHE PATH "Boost 根目录")
-set(GRPC_ROOT        "D:/cppsoft/grpc"
-    CACHE PATH "gRPC 根目录")
-set(GRPC_BUILD_DIR   "D:/cppsoft/grpc/visualpro"
-    CACHE PATH "gRPC 构建输出目录（visualpro）")
-set(MYSQL_ROOT       "D:/cppsoft/mysql_connector/mysql-connector-c++-8.3.0-winx64-debug/mysql-connector-c++-8.3.0-winx64"
+find_package(gRPC CONFIG REQUIRED)
+find_package(protobuf CONFIG REQUIRED)
+find_package(Boost REQUIRED COMPONENTS filesystem system)
+find_package(jsoncpp CONFIG REQUIRED)
+find_package(hiredis CONFIG REQUIRED)
+
+# ==============================================================================
+# MySQL Connector C++（独立安装，非 vcpkg）
+# ==============================================================================
+set(MYSQL_ROOT
+    "D:/cppsoft/mysql_connector/mysql-connector-c++-8.3.0-winx64-debug/mysql-connector-c++-8.3.0-winx64"
     CACHE PATH "MySQL Connector C++ 根目录")
-set(VCPKG_INSTALLED  "D:/Vcpkg/vcpkg/installed/x64-windows"
-    CACHE PATH "vcpkg 安装目录")
 
 # ==============================================================================
 # 源文件
@@ -40,134 +54,71 @@ set(SOURCES
 add_executable(${PROJECT_NAME} ${SOURCES})
 
 # ==============================================================================
+# 编译宏定义
+# ==============================================================================
+target_compile_definitions(${PROJECT_NAME} PRIVATE
+    # 目标 Windows 10+（Boost.Asio 必须明确指定，否则报警告/错误）
+    _WIN32_WINNT=0x0A00
+    WIN32_LEAN_AND_MEAN   # 减少 Windows.h 包含范围，避免宏冲突
+)
+
+# MSVC：源文件和输出均使用 UTF-8，避免中文乱码
+if(MSVC)
+    target_compile_options(${PROJECT_NAME} PRIVATE /utf-8)
+endif()
+
+# ==============================================================================
 # 头文件搜索路径
 # ==============================================================================
 target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_SOURCE_DIR}/include
     ${CMAKE_SOURCE_DIR}/proto
-    ${BOOST_ROOT}
-    ${GRPC_ROOT}/include
-    ${GRPC_ROOT}/third_party/protobuf/src
-    ${GRPC_ROOT}/third_party/abseil-cpp
-    ${GRPC_ROOT}/third_party/address_sorting/include
     ${MYSQL_ROOT}/include
-    ${VCPKG_INSTALLED}/include
 )
 
 # ==============================================================================
-# 库搜索路径
-# ==============================================================================
-target_link_directories(${PROJECT_NAME} PRIVATE
-    ${MYSQL_ROOT}/lib64/vs14/debug
-    ${VCPKG_INSTALLED}/lib
-    ${BOOST_ROOT}/stage/lib
-    ${GRPC_BUILD_DIR}/Debug
-    ${GRPC_BUILD_DIR}/third_party/cares/cares/lib/Debug
-    ${GRPC_BUILD_DIR}/third_party/zlib/Debug
-    ${GRPC_BUILD_DIR}/third_party/protobuf/Debug
-    ${GRPC_BUILD_DIR}/third_party/boringssl-with-bazel/Debug
-    ${GRPC_BUILD_DIR}/third_party/re2/Debug
-    ${GRPC_BUILD_DIR}/third_party/abseil-cpp/absl/base/Debug
-    ${GRPC_BUILD_DIR}/third_party/abseil-cpp/absl/strings/Debug
-    ${GRPC_BUILD_DIR}/third_party/abseil-cpp/absl/time/Debug
-    ${GRPC_BUILD_DIR}/third_party/abseil-cpp/absl/numeric/Debug
-    ${GRPC_BUILD_DIR}/third_party/abseil-cpp/absl/hash/Debug
-    ${GRPC_BUILD_DIR}/third_party/abseil-cpp/absl/container/Debug
-    ${GRPC_BUILD_DIR}/third_party/abseil-cpp/absl/debugging/Debug
-    ${GRPC_BUILD_DIR}/third_party/abseil-cpp/absl/flags/Debug
-    ${GRPC_BUILD_DIR}/third_party/abseil-cpp/absl/random/Debug
-    ${GRPC_BUILD_DIR}/third_party/abseil-cpp/absl/status/Debug
-    ${GRPC_BUILD_DIR}/third_party/abseil-cpp/absl/synchronization/Debug
-    ${GRPC_BUILD_DIR}/third_party/abseil-cpp/absl/types/Debug
-)
-
-# ==============================================================================
-# 链接库
+# 链接库（vcpkg 的 imported targets 自动处理 include 和 lib 路径）
 # ==============================================================================
 target_link_libraries(${PROJECT_NAME} PRIVATE
-    # gRPC & Protobuf
-    libprotobufd
-    gpr
-    grpc
-    grpc++
-    grpc++_reflection
-    address_sorting
-    upb
-    cares
-    zlibstaticd
-    # OpenSSL (BoringSSL)
-    ssl
-    crypto
-    # Abseil
-    absl_bad_any_cast_impl
-    absl_bad_optional_access
-    absl_bad_variant_access
-    absl_base
-    absl_city
-    absl_civil_time
-    absl_cord
-    absl_debugging_internal
-    absl_demangle_internal
-    absl_examine_stack
-    absl_exponential_biased
-    absl_failure_signal_handler
-    absl_flags
-    absl_flags_config
-    absl_flags_internal
-    absl_flags_marshalling
-    absl_flags_parse
-    absl_flags_program_name
-    absl_flags_usage
-    absl_flags_usage_internal
-    absl_graphcycles_internal
-    absl_hash
-    absl_hashtablez_sampler
-    absl_int128
-    absl_leak_check
-    absl_leak_check_disable
-    absl_log_severity
-    absl_malloc_internal
-    absl_periodic_sampler
-    absl_random_distributions
-    absl_random_internal_distribution_test_util
-    absl_random_internal_pool_urbg
-    absl_random_internal_randen
-    absl_random_internal_randen_hwaes
-    absl_random_internal_randen_hwaes_impl
-    absl_random_internal_randen_slow
-    absl_random_internal_seed_material
-    absl_random_seed_gen_exception
-    absl_random_seed_sequences
-    absl_raw_hash_set
-    absl_raw_logging_internal
-    absl_scoped_set_env
-    absl_spinlock_wait
-    absl_stacktrace
-    absl_status
-    absl_statusor
-    absl_strings
-    absl_strings_internal
-    absl_str_format_internal
-    absl_symbolize
-    absl_synchronization
-    absl_throw_delegate
-    absl_time
-    absl_time_zone
-    # RE2
-    re2
+    # gRPC（自动携带 protobuf、abseil、ssl、cares、zlib 等所有传递依赖）
+    gRPC::grpc++
+    gRPC::grpc++_reflection
+    # Protobuf
+    protobuf::libprotobuf
+    # Boost
+    Boost::filesystem
+    Boost::system
+    # JSON
+    JsonCpp::JsonCpp
+    # Redis
+    hiredis::hiredis
     # MySQL Connector C++
-    mysqlcppconn
-    mysqlcppconn8
+    ${MYSQL_ROOT}/lib64/vs14/$<IF:$<CONFIG:Debug>,debug,release>/mysqlcppconn.lib
+    ${MYSQL_ROOT}/lib64/vs14/$<IF:$<CONFIG:Debug>,debug,release>/mysqlcppconn8.lib
     # Windows
     ws2_32
 )
 
 # ==============================================================================
-# 构建后：将 config.ini 复制到输出目录
+# 构建后：复制运行时依赖到输出目录
 # ==============================================================================
+
+# config.ini
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         ${CMAKE_SOURCE_DIR}/config.ini
         $<TARGET_FILE_DIR:${PROJECT_NAME}>/config.ini
-    COMMENT "Copying config.ini to output directory"
+    COMMENT "Copying config.ini"
+)
+
+# MySQL Connector C++ 运行时 DLL（不在 vcpkg 中，需手动复制）
+set(MYSQL_DLL_DIR ${MYSQL_ROOT}/lib64/$<IF:$<CONFIG:Debug>,debug,release>)
+add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        ${MYSQL_DLL_DIR}/mysqlcppconn-9-vs14.dll
+        $<TARGET_FILE_DIR:${PROJECT_NAME}>/mysqlcppconn-9-vs14.dll
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        ${MYSQL_DLL_DIR}/mysqlcppconn8-2-vs14.dll
+        $<TARGET_FILE_DIR:${PROJECT_NAME}>/mysqlcppconn8-2-vs14.dll
+    COMMENT "Copying MySQL Connector C++ runtime DLLs"
 )

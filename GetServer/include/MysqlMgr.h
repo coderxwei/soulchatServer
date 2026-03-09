@@ -1,22 +1,44 @@
 #pragma once
+
 #include "const.h"
+
 #include "MysqlDao.h"
+
 class MysqlMgr : public Singleton<MysqlMgr>
+
 {
+
 	friend class Singleton<MysqlMgr>;
+
 public:
+
 	~MysqlMgr();
 
+
+
 	int RegUser(const std::string& name, const std::string& email, const std::string& pwd);
-	/// ¼ìÑéÓÊÏä
+
+	/// æ£€éªŒé‚®ç®±
+
 	bool CheckEmail(const std::string& name, const std::string& email);
+
 		
-	/// ¸üĞÂÃÜÂë
+
+	/// æ›´æ–°å¯†ç 
+
 	bool UpdatePwd(const std::string& name, const std::string& pwd);
+
 	bool CheckPwd(const std::string& email, const std::string& pwd, UserInfo& userInfo);
+
 	//bool TestProcedure(const std::string& email, int& uid, string& name);
+
 	
+
 private:
+
 	MysqlMgr();
+
 	MysqlDao  _dao;
+
 };
+

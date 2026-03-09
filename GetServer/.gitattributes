@@ -1,0 +1,10 @@
+* text=auto eol=lf
+*.cpp text eol=lf
+*.h text eol=lf
+*.proto text eol=lf
+*.cmake text eol=lf
+*.md text eol=lf
+*.ini text eol=lf
+*.dll binary
+*.lib binary
+*.exe binary

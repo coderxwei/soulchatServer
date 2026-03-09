@@ -1,0 +1,31 @@
+# CMake 构建目录
+build/
+cmake-build-*/
+
+# CLion IDE 文件
+.idea/
+
+# Visual Studio 文件（已迁移，保留此规则防止误入）
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.props
+*.user
+.vs/
+
+# 构建产物
+*.exe
+*.obj
+*.pdb
+*.ilk
+*.exp
+*.lib
+*.dll
+x64/
+Debug/
+Release/
+
+# 其他
+*.suo
+packages/

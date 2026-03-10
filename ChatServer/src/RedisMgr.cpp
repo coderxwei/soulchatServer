@@ -45,13 +45,18 @@ bool RedisMgr::Get(const std::string& key, std::string& value)
 	 return true;
 }
 
-bool RedisMgr::Set(const std::string &key, const std::string &value){
+bool RedisMgr::Set(const std::string &key, const std::string &value,int expiration_time){
 	//执行redis命令行
 	auto connect = _con_pool->getConnection();
 	if (connect == nullptr) {
 		return false;
 	}
-	auto reply = (redisReply*)redisCommand(connect, "SET %s %s", key.c_str(), value.c_str());
+	redisReply* reply = nullptr;
+	if (expiration_time > 0) {
+		reply = (redisReply*)redisCommand(connect, "SET %s %s EX %d", key.c_str(), value.c_str(), expiration_time);
+	} else {
+		reply = (redisReply*)redisCommand(connect, "SET %s %s", key.c_str(), value.c_str());
+	}
 
 	//如果返回NULL则说明执行失败
 	if (NULL == reply)
@@ -330,6 +335,41 @@ bool RedisMgr::Del(const std::string &key)
 	 freeReplyObject(reply);
 	 _con_pool->returnConnection(connect);
 	 return true;
+}
+
+bool RedisMgr::Expire(const std::string &key, int seconds)
+{
+	auto connect = _con_pool->getConnection();
+	if (connect == nullptr) {
+		return false;
+	}
+	auto reply = (redisReply*)redisCommand(connect, "EXPIRE %s %d", key.c_str(), seconds);
+	if (reply == nullptr) {
+		_con_pool->returnConnection(connect);
+		return false;
+	}
+	bool success = (reply->type == REDIS_REPLY_INTEGER && reply->integer == 1);
+	freeReplyObject(reply);
+	_con_pool->returnConnection(connect);
+	return success;
+}
+
+long long RedisMgr::Incr(const std::string &key)
+{
+	auto connect = _con_pool->getConnection();
+	if (connect == nullptr) {
+		return -1;
+	}
+	auto reply = (redisReply*)redisCommand(connect, "INCR %s", key.c_str());
+	if (reply == nullptr || reply->type != REDIS_REPLY_INTEGER) {
+		if (reply) freeReplyObject(reply);
+		_con_pool->returnConnection(connect);
+		return -1;
+	}
+	long long val = reply->integer;
+	freeReplyObject(reply);
+	_con_pool->returnConnection(connect);
+	return val;
 }
 
 bool RedisMgr::ExistsKey(const std::string &key)

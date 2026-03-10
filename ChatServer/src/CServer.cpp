@@ -119,7 +119,7 @@ void CServer::on_timer(const boost::system::error_code& ec) {
 	auto& cfg = ConfigMgr::Inst();
 	auto self_name = cfg["SelfServer"]["Name"];
 	auto count_str = std::to_string(session_count);
-	RedisMgr::GetInstance()->HSet(LOGIN_COUNT, self_name, count_str);
+	RedisMgr::GetInstance()->Set(IPCOUNTPREFIX + self_name, count_str, 90);
 
 	//处理过期session, 单独提出，防止死锁
 	for (auto &session : _expired_sessions) {

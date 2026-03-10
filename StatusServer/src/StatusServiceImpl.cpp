@@ -65,35 +65,29 @@ ChatServer StatusServiceImpl::getChatServer() {
 	}
 	auto minServer = _servers.begin()->second;
 
-	//�ڳ�����СֵΪ��һ����������������
-	auto count_str = RedisMgr::GetInstance()->HGet(LOGIN_COUNT, minServer.name);
-	if (count_str.empty()) {
-		//��������Ĭ������Ϊ���
-		minServer.con_count = INT_MAX;
-	}
-	else {
-		minServer.con_count = std::stoi(count_str);
-	}
+	// 读取 minServer 的在线人数，key 不存在说明该节点已宕机
+	std::string min_count_str = "";
+	bool min_exist = RedisMgr::GetInstance()->Get(IPCOUNTPREFIX + minServer.name, min_count_str);
+	minServer.con_count = min_exist ? std::stoi(min_count_str) : INT_MAX;
 
-
-	// ʹ�÷�Χ����forѭ��
-	for ( auto& server : _servers) {
-		
+	// 遍历其余节点，选出连接数最小的服务器
+	for (auto& server : _servers) {
 		if (server.second.name == minServer.name) {
 			continue;
 		}
 
-		auto count_str = RedisMgr::GetInstance()->HGet(LOGIN_COUNT, server.second.name);
-		if (count_str.empty()) {
-			server.second.con_count = INT_MAX;
-		}
-		else {
-			server.second.con_count = std::stoi(count_str);
-		}
+		std::string count_str = "";
+		bool exist = RedisMgr::GetInstance()->Get(IPCOUNTPREFIX + server.second.name, count_str);
+		server.second.con_count = exist ? std::stoi(count_str) : INT_MAX;
 
 		if (server.second.con_count < minServer.con_count) {
 			minServer = server.second;
 		}
+	}
+
+	// 所有节点均不可用
+	if (minServer.con_count == INT_MAX) {
+		return ChatServer();
 	}
 
 	return minServer;

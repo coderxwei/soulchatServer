@@ -273,7 +273,7 @@ class RedisMgr: public Singleton<RedisMgr>,
 public:
 	~RedisMgr();
 	bool Get(const std::string &key, std::string& value);
-	bool Set(const std::string &key, const std::string &value);
+	bool Set(const std::string &key, const std::string &value, int expaire_time = 0);
 	bool LPush(const std::string &key, const std::string &value);
 	bool LPop(const std::string &key, std::string& value);
 	bool RPush(const std::string& key, const std::string& value);
@@ -283,6 +283,9 @@ public:
 	std::string HGet(const std::string &key, const std::string &hkey);
 	bool HDel(const std::string& key, const std::string& field);
 	bool Del(const std::string &key);
+	// 给一个已存在的 key 设置过期时间：
+	bool Expire(const std::string &key, int seconds);
+	long long Incr(const std::string &key);
 	bool ExistsKey(const std::string &key);
 	void Close() {
 		_con_pool->Close();

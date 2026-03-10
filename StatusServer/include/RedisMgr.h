@@ -272,7 +272,7 @@ class RedisMgr: public Singleton<RedisMgr>,
 public:
 	~RedisMgr();
 	bool Get(const std::string &key, std::string& value);
-	bool Set(const std::string &key, const std::string &value);
+	bool Set(const std::string &key, const std::string &value,int exparetion);
 	bool LPush(const std::string &key, const std::string &value);
 	bool LPop(const std::string &key, std::string& value);
 	bool RPush(const std::string& key, const std::string& value);

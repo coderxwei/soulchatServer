@@ -20,8 +20,6 @@ void CServer::Start()
 
 {
 
-
-
 	//捕获自身（auto self = shared_from_this(); 并在 lambda 里 [self, ...]）的目的，
 
 	// 就是确保异步操作未完成时，CServer 对象不会被提前析构。

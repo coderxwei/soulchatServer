@@ -35,13 +35,13 @@ int main()
 		///初始化服务器连接池--》会创建多个连接的io_context 
 		auto pool = AsioIOServicePool::GetInstance();
 		///记录本服务器在线数初始=0
-		RedisMgr::GetInstance()->HSet(LOGIN_COUNT, server_name, "0");
+		RedisMgr::GetInstance()->Set(IPCOUNTPREFIX + server_name, "0", 90);
 
 
 		///当 derfer 变量离开其作用域（这里是 main() 末尾，包含正常返回或抛异常走到 catch 之前的栈展开）时
 		///Defer::~Defer() 被调用，执行 lambda，完成资源回收与状态撤销。
 		Defer derfer([server_name]() {
-			RedisMgr::GetInstance()->HDel(LOGIN_COUNT, server_name);
+			RedisMgr::GetInstance()->Del(IPCOUNTPREFIX + server_name);
 			RedisMgr::GetInstance()->Close();
 			});
 		///main 中的 boost::asio::io_context io_context; 就是“主事件循环”：

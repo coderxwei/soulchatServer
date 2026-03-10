@@ -58,3 +58,23 @@ bool MysqlMgr::GetFriendList(int self_id, std::vector<std::shared_ptr<UserInfo> 
 	return _dao.GetFriendList(self_id, user_info);
 }
 
+bool MysqlMgr::SaveMessage(const TextMsg& msg) {
+	return _dao.SaveMessage(msg);
+}
+
+bool MysqlMgr::GetUnreadMessages(int to_uid, long long last_recv_seq, std::vector<TextMsg>& msgs) {
+	return _dao.GetUnreadMessages(to_uid, last_recv_seq, msgs);
+}
+
+bool MysqlMgr::GetHistoryMessages(const std::string& conv_id, long long before_seq, int limit, std::vector<TextMsg>& msgs) {
+	return _dao.GetHistoryMessages(conv_id, before_seq, limit, msgs);
+}
+
+bool MysqlMgr::UpdateMsgCursor(int uid, long long seq) {
+	return _dao.UpdateMsgCursor(uid, seq);
+}
+
+long long MysqlMgr::GetMsgCursor(int uid) {
+	return _dao.GetMsgCursor(uid);
+}
+

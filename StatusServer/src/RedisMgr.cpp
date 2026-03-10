@@ -45,13 +45,13 @@ bool RedisMgr::Get(const std::string& key, std::string& value)
 	 return true;
 }
 
-bool RedisMgr::Set(const std::string &key, const std::string &value){
+bool RedisMgr::Set(const std::string &key, const std::string &value,int exparetion){
 	//执行redis命令
 	auto connect = _con_pool->getConnection();
 	if (connect == nullptr) {
 		return false;
 	}
-	auto reply = (redisReply*)redisCommand(connect, "SET %s %s", key.c_str(), value.c_str());
+	auto reply = (redisReply*)redisCommand(connect, "SET %s %s EX %D", key.c_str(), value.c_str(),exparetion);
 
 	//如果返回NULL，说明执行失败
 	if (NULL == reply)

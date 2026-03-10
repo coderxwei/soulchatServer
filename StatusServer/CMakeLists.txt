@@ -1,4 +1,9 @@
 cmake_minimum_required(VERSION 3.20)
+
+# vcpkg toolchain（必须在 project() 之前）
+set(CMAKE_TOOLCHAIN_FILE "D:/Vcpkg/vcpkg/scripts/buildsystems/vcpkg.cmake"
+        CACHE PATH "vcpkg toolchain")
+
 project(StatusServer CXX)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -13,10 +18,12 @@ if(MSVC)
 endif()
 
 # ============================================================
-# vcpkg 路径（所有第三方库均通过 vcpkg 管理）
+# 查找依赖（vcpkg 自动处理所有传递依赖）
 # ============================================================
-set(VCPKG_ROOT "D:/Vcpkg/vcpkg/installed/x64-windows"
-        CACHE PATH "vcpkg installed root")
+find_package(gRPC CONFIG REQUIRED)
+find_package(Protobuf CONFIG REQUIRED)
+find_package(hiredis CONFIG REQUIRED)
+find_package(Boost REQUIRED COMPONENTS filesystem)
 
 # ============================================================
 # 头文件搜索路径
@@ -24,14 +31,6 @@ set(VCPKG_ROOT "D:/Vcpkg/vcpkg/installed/x64-windows"
 include_directories(
         ${CMAKE_SOURCE_DIR}/include
         ${CMAKE_SOURCE_DIR}/proto
-        ${VCPKG_ROOT}/include
-)
-
-# ============================================================
-# 库文件搜索路径（Debug/Release 自动切换）
-# ============================================================
-link_directories(
-        $<IF:$<CONFIG:Debug>,${VCPKG_ROOT}/debug/lib,${VCPKG_ROOT}/lib>
 )
 
 # ============================================================
@@ -45,68 +44,27 @@ file(GLOB_RECURSE SOURCES
 add_executable(${PROJECT_NAME} ${SOURCES})
 
 # ============================================================
-# 链接库
+# 链接库（通过 CMake targets，传递依赖自动处理）
 # ============================================================
 target_link_libraries(${PROJECT_NAME}
-        # gRPC
-        grpc++
-        grpc++_reflection
-        grpc
-        gpr
-        address_sorting
-
-        # Protobuf
-        $<IF:$<CONFIG:Debug>,libprotobufd,libprotobuf>
-
-        # upb
-        upb_base_lib
-        upb_json_lib
-        upb_mem_lib
-        upb_message_lib
-        upb_mini_descriptor_lib
-        upb_textformat_lib
-        upb_wire_lib
-
-        # TLS (OpenSSL)
-        libssl
-        libcrypto
-
-        # 其他依赖
-        cares
-        re2
-        $<IF:$<CONFIG:Debug>,zlibd,zlib>
-
-        # Abseil（vcpkg 动态库，通过 abseil_dll.lib 导入）
-        absl_flags_commandlineflag
-        absl_flags_commandlineflag_internal
-        absl_flags_config
-        absl_flags_internal
-        absl_flags_marshalling
-        absl_flags_parse
-        absl_flags_private_handle_accessor
-        absl_flags_program_name
-        absl_flags_reflection
-        absl_flags_usage
-        absl_flags_usage_internal
-        absl_log_flags
-
-        # hiredis
-        $<IF:$<CONFIG:Debug>,hiredisd,hiredis>
-
-        # Windows
+        gRPC::grpc++
+        gRPC::grpc++_reflection
+        protobuf::libprotobuf
+        hiredis::hiredis
+        Boost::filesystem
         ws2_32
 )
 
 # ============================================================
 # 构建后：拷贝 config.ini 和运行时 DLL
 # ============================================================
+set(VCPKG_ROOT "D:/Vcpkg/vcpkg/installed/x64-windows")
 set(VCPKG_BIN $<IF:$<CONFIG:Debug>,${VCPKG_ROOT}/debug/bin,${VCPKG_ROOT}/bin>)
 
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 ${CMAKE_SOURCE_DIR}/config.ini
                 $<TARGET_FILE_DIR:${PROJECT_NAME}>/config.ini
-        # 将 vcpkg 运行时 DLL 拷贝到输出目录
         COMMAND ${CMAKE_COMMAND} -E copy_directory
                 ${VCPKG_BIN}
                 $<TARGET_FILE_DIR:${PROJECT_NAME}>

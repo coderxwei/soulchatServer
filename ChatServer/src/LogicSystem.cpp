@@ -121,6 +121,9 @@ void LogicSystem::RegisterCallBacks()
 	_fun_callbacks[ID_TEXT_CHAT_MSG_REQ] = std::bind(&LogicSystem::DealChatTextMsg, this,
 													 placeholders::_1, placeholders::_2, placeholders::_3);
 
+	_fun_callbacks[ID_MSG_HISTORY_REQ] = std::bind(&LogicSystem::DealMsgHistoryReq, this,
+												   placeholders::_1, placeholders::_2, placeholders::_3);
+
 	_fun_callbacks[ID_HEART_BEAT_REQ] = std::bind(&LogicSystem::HeartBeatHandler, this,
 												  placeholders::_1, placeholders::_2, placeholders::_3);
 }
@@ -272,16 +275,44 @@ void LogicSystem::LoginHandler(shared_ptr<CSession> session, const short &msg_id
 		}
 	}
 
-	// 写入新的登录状态
+	// 写入新的登录状态 要设置过期时间防止，服务器宕机后要清理掉已经在线的用户。
 	std::string ipkey = USERIPPREFIX + uid_str;
-	RedisMgr::GetInstance()->Set(ipkey, server_name);
+
+	int expaire_time=90;
+
+	RedisMgr::GetInstance()->Set(ipkey, server_name,expaire_time);
 
 	// 记录session id，方便后续踢人定位
 	std::string uid_session_key = USER_SESSION_PREFIX + uid_str;
-	RedisMgr::GetInstance()->Set(uid_session_key, session->GetSessionId());
+
+	RedisMgr::GetInstance()->Set(uid_session_key, session->GetSessionId(),expaire_time);
 
 	// uid和session绑定管理
 	UserMgr::GetInstance()->SetUserSession(uid, session);
+
+	// 拉取并推送未读消息（登录后补齐离线期间收到的消息）
+	long long last_seq = MysqlMgr::GetInstance()->GetMsgCursor(uid);
+	std::vector<TextMsg> unread_msgs;
+	MysqlMgr::GetInstance()->GetUnreadMessages(uid, last_seq, unread_msgs);
+	if (!unread_msgs.empty()) {
+		Json::Value offline_val;
+		offline_val["error"] = ErrorCodes::Success;
+		long long max_seq = last_seq;
+		for (auto &msg : unread_msgs) {
+			Json::Value obj;
+			obj["msgid"]    = msg.msg_id;
+			obj["conv_id"]  = msg.conv_id;
+			obj["fromuid"]  = msg.from_uid;
+			obj["touid"]    = msg.to_uid;
+			obj["content"]  = msg.content;
+			obj["msg_type"] = msg.msg_type;
+			obj["seq"]      = (Json::Int64)msg.seq;
+			offline_val["messages"].append(obj);
+			if (msg.seq > max_seq) max_seq = msg.seq;
+		}
+		session->Send(offline_val.toStyledString(), ID_OFFLINE_MSG_RSP);
+		MysqlMgr::GetInstance()->UpdateMsgCursor(uid, max_seq);
+	}
 
 	return;
 }
@@ -501,64 +532,119 @@ void LogicSystem::DealChatTextMsg(std::shared_ptr<CSession> session, const short
 	Json::Value root;
 	reader.parse(msg_data, root);
 
-	auto uid = root["fromuid"].asInt();
+	auto uid   = root["fromuid"].asInt();
 	auto touid = root["touid"].asInt();
-
 	const Json::Value arrays = root["text_array"];
 
 	Json::Value rtvalue;
-	rtvalue["error"] = ErrorCodes::Success;
-	rtvalue["text_array"] = arrays;
+	rtvalue["error"]   = ErrorCodes::Success;
 	rtvalue["fromuid"] = uid;
-	rtvalue["touid"] = touid;
+	rtvalue["touid"]   = touid;
 
-	Defer defer([this, &rtvalue, session]()
-				{
-		std::string return_str = rtvalue.toStyledString();
-		session->Send(return_str, ID_TEXT_CHAT_MSG_RSP); });
+	Defer defer([this, &rtvalue, session]() {
+		session->Send(rtvalue.toStyledString(), ID_TEXT_CHAT_MSG_RSP);
+	});
 
-	// 查询redis 查找touid对应的server ip
-	auto to_str = std::to_string(touid);
-	auto to_ip_key = USERIPPREFIX + to_str;
-	std::string to_ip_value = "";
-	bool b_ip = RedisMgr::GetInstance()->Get(to_ip_key, to_ip_value);
-	if (!b_ip)
-	{
-		return;
-	}
-
-	auto &cfg = ConfigMgr::Inst();
+	auto &cfg      = ConfigMgr::Inst();
 	auto self_name = cfg["SelfServer"]["Name"];
-	// 直接通知对方有认证通过消息
-	if (to_ip_value == self_name)
-	{
-		auto session = UserMgr::GetInstance()->GetSession(touid);
-		if (session)
-		{
-			// 在内存中则直接发送通知对方
-			std::string return_str = rtvalue.toStyledString();
-			session->Send(return_str, ID_NOTIFY_TEXT_CHAT_MSG_REQ);
+
+	// conv_id：保证同一会话两端相同
+	std::string conv_id = std::to_string(std::min(uid, touid))
+	                    + "_"
+	                    + std::to_string(std::max(uid, touid));
+	std::string seq_key = CONV_SEQ_PREFIX + conv_id;
+    // 执行服务器落库操作。
+
+
+	// 逐条落库（写库失败则整体返回错误，不推送）
+	Json::Value saved_array;
+	for (const auto &txt_obj : arrays) {
+		TextMsg msg;
+		msg.msg_id   = txt_obj["msgid"].asString();
+		msg.conv_id  = conv_id;
+		msg.from_uid = uid;
+		msg.to_uid   = touid;
+		msg.content  = txt_obj["content"].asString();
+		msg.msg_type = 1;
+		msg.seq      = RedisMgr::GetInstance()->Incr(seq_key);  // 原子自增
+		// 保存消息
+		if (!MysqlMgr::GetInstance()->SaveMessage(msg)) {
+			rtvalue["error"] = ErrorCodes::RPCFailed;
+			return;
 		}
 
+		Json::Value obj;
+		obj["msgid"]   = msg.msg_id;
+		obj["content"] = msg.content;
+		obj["seq"]     = (Json::Int64)msg.seq;
+		saved_array.append(obj);
+	}
+	rtvalue["text_array"] = saved_array;
+
+	// 查询 touid 所在服务器
+	auto to_ip_key = USERIPPREFIX + std::to_string(touid);
+	std::string to_ip_value = "";
+	bool b_ip = RedisMgr::GetInstance()->Get(to_ip_key, to_ip_value);
+	if (!b_ip) {
+		// 对方离线：消息已入库，等登录时拉取
 		return;
 	}
 
+	if (to_ip_value == self_name) {
+		// 同服务器：直接推送
+		auto to_session = UserMgr::GetInstance()->GetSession(touid);
+		if (to_session) {
+			to_session->Send(rtvalue.toStyledString(), ID_NOTIFY_TEXT_CHAT_MSG_REQ);
+		}
+		return;
+	}
+
+	// 跨服务器：gRPC 转发
 	TextChatMsgReq text_msg_req;
 	text_msg_req.set_fromuid(uid);
 	text_msg_req.set_touid(touid);
-	for (const auto &txt_obj : arrays)
-	{
-		auto content = txt_obj["content"].asString();
-		auto msgid = txt_obj["msgid"].asString();
-		std::cout << "content is " << content << std::endl;
-		std::cout << "msgid is " << msgid << std::endl;
+	for (const auto &obj : saved_array) {
 		auto *text_msg = text_msg_req.add_textmsgs();
-		text_msg->set_msgid(msgid);
-		text_msg->set_msgcontent(content);
+		text_msg->set_msgid(obj["msgid"].asString());
+		text_msg->set_msgcontent(obj["content"].asString());
 	}
-
-	// 发送通知 todo...
 	ChatGrpcClient::GetInstance()->NotifyTextChatMsg(to_ip_value, text_msg_req, rtvalue);
+}
+
+void LogicSystem::DealMsgHistoryReq(std::shared_ptr<CSession> session, const short &msg_id, const string &msg_data)
+{
+	Json::Reader reader;
+	Json::Value root;
+	reader.parse(msg_data, root);
+
+	// 客户端请求：{ "conv_id": "1001_1002", "before_seq": 100, "limit": 50 }
+	std::string conv_id  = root["conv_id"].asString();
+	long long before_seq = root["before_seq"].asInt64();
+	int limit            = root["limit"].asInt();
+	if (limit <= 0 || limit > 50) limit = 50;
+
+	Json::Value rtvalue;
+	rtvalue["error"]   = ErrorCodes::Success;
+	rtvalue["conv_id"] = conv_id;
+
+	Defer defer([&rtvalue, session]() {
+		session->Send(rtvalue.toStyledString(), ID_MSG_HISTORY_RSP);
+	});
+
+	std::vector<TextMsg> msgs;
+	MysqlMgr::GetInstance()->GetHistoryMessages(conv_id, before_seq, limit, msgs);
+
+	for (auto &msg : msgs) {
+		Json::Value obj;
+		obj["msgid"]      = msg.msg_id;
+		obj["fromuid"]    = msg.from_uid;
+		obj["touid"]      = msg.to_uid;
+		obj["content"]    = msg.content;
+		obj["msg_type"]   = msg.msg_type;
+		obj["seq"]        = (Json::Int64)msg.seq;
+		obj["created_at"] = msg.created_at;
+		rtvalue["messages"].append(obj);
+	}
 }
 
 void LogicSystem::HeartBeatHandler(std::shared_ptr<CSession> session, const short &msg_id, const string &msg_data)

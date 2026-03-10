@@ -20,6 +20,12 @@ public:
 	std::shared_ptr<UserInfo> GetUser(std::string name);
 	bool GetApplyList(int touid, std::vector<std::shared_ptr<ApplyInfo>>& applyList, int begin, int limit=10);
 	bool GetFriendList(int self_id, std::vector<std::shared_ptr<UserInfo> >& user_info);
+	// 消息持久化相关
+	bool SaveMessage(const TextMsg& msg);
+	bool GetUnreadMessages(int to_uid, long long last_recv_seq, std::vector<TextMsg>& msgs);
+	bool GetHistoryMessages(const std::string& conv_id, long long before_seq, int limit, std::vector<TextMsg>& msgs);
+	bool UpdateMsgCursor(int uid, long long seq);
+	long long GetMsgCursor(int uid);
 private:
 	MysqlMgr();
 	MysqlDao  _dao;

@@ -478,3 +478,141 @@ bool MysqlDao::GetFriendList(int self_id, std::vector<std::shared_ptr<UserInfo> 
 
 	return true;
 }
+
+bool MysqlDao::SaveMessage(const TextMsg& msg)
+{
+	auto con = pool_->getConnection();
+	if (con == nullptr) return false;
+	Defer defer([this, &con]() { pool_->returnConnection(std::move(con)); });
+	try {
+		// INSERT IGNORE：msg_id UNIQUE，重复投递幂等处理
+		std::unique_ptr<sql::PreparedStatement> pstmt(con->_con->prepareStatement(
+			"INSERT IGNORE INTO messages "
+			"(msg_id, conv_id, from_uid, to_uid, content, msg_type, seq, status) "
+			"VALUES (?, ?, ?, ?, ?, ?, ?, 0)"
+		));
+		pstmt->setString(1, msg.msg_id);
+		pstmt->setString(2, msg.conv_id);
+		pstmt->setInt(3,    msg.from_uid);
+		pstmt->setInt(4,    msg.to_uid);
+		pstmt->setString(5, msg.content);
+		pstmt->setInt(6,    msg.msg_type);
+		pstmt->setInt64(7,  msg.seq);
+		pstmt->executeUpdate();
+		return true;
+	}
+	catch (sql::SQLException& e) {
+		std::cerr << "SaveMessage error: " << e.what() << std::endl;
+		return false;
+	}
+}
+
+bool MysqlDao::GetUnreadMessages(int to_uid, long long last_recv_seq, std::vector<TextMsg>& msgs)
+{
+	auto con = pool_->getConnection();
+	if (con == nullptr) return false;
+	Defer defer([this, &con]() { pool_->returnConnection(std::move(con)); });
+	try {
+		std::unique_ptr<sql::PreparedStatement> pstmt(con->_con->prepareStatement(
+			"SELECT msg_id, conv_id, from_uid, to_uid, content, msg_type, seq, status, created_at "
+			"FROM messages WHERE to_uid = ? AND seq > ? ORDER BY seq ASC LIMIT 200"
+		));
+		pstmt->setInt(1,   to_uid);
+		pstmt->setInt64(2, last_recv_seq);
+		std::unique_ptr<sql::ResultSet> res(pstmt->executeQuery());
+		while (res->next()) {
+			TextMsg m;
+			m.msg_id     = res->getString("msg_id");
+			m.conv_id    = res->getString("conv_id");
+			m.from_uid   = res->getInt("from_uid");
+			m.to_uid     = res->getInt("to_uid");
+			m.content    = res->getString("content");
+			m.msg_type   = res->getInt("msg_type");
+			m.seq        = res->getInt64("seq");
+			m.status     = res->getInt("status");
+			m.created_at = res->getString("created_at");
+			msgs.push_back(m);
+		}
+		return true;
+	}
+	catch (sql::SQLException& e) {
+		std::cerr << "GetUnreadMessages error: " << e.what() << std::endl;
+		return false;
+	}
+}
+
+bool MysqlDao::GetHistoryMessages(const std::string& conv_id, long long before_seq, int limit, std::vector<TextMsg>& msgs)
+{
+	auto con = pool_->getConnection();
+	if (con == nullptr) return false;
+	Defer defer([this, &con]() { pool_->returnConnection(std::move(con)); });
+	try {
+		std::unique_ptr<sql::PreparedStatement> pstmt(con->_con->prepareStatement(
+			"SELECT msg_id, conv_id, from_uid, to_uid, content, msg_type, seq, status, created_at "
+			"FROM messages WHERE conv_id = ? AND seq < ? ORDER BY seq DESC LIMIT ?"
+		));
+		pstmt->setString(1, conv_id);
+		pstmt->setInt64(2,  before_seq);
+		pstmt->setInt(3,    limit);
+		std::unique_ptr<sql::ResultSet> res(pstmt->executeQuery());
+		while (res->next()) {
+			TextMsg m;
+			m.msg_id     = res->getString("msg_id");
+			m.conv_id    = res->getString("conv_id");
+			m.from_uid   = res->getInt("from_uid");
+			m.to_uid     = res->getInt("to_uid");
+			m.content    = res->getString("content");
+			m.msg_type   = res->getInt("msg_type");
+			m.seq        = res->getInt64("seq");
+			m.status     = res->getInt("status");
+			m.created_at = res->getString("created_at");
+			msgs.push_back(m);
+		}
+		return true;
+	}
+	catch (sql::SQLException& e) {
+		std::cerr << "GetHistoryMessages error: " << e.what() << std::endl;
+		return false;
+	}
+}
+
+bool MysqlDao::UpdateMsgCursor(int uid, long long seq)
+{
+	auto con = pool_->getConnection();
+	if (con == nullptr) return false;
+	Defer defer([this, &con]() { pool_->returnConnection(std::move(con)); });
+	try {
+		std::unique_ptr<sql::PreparedStatement> pstmt(con->_con->prepareStatement(
+			"INSERT INTO user_msg_cursor (uid, last_recv_seq) VALUES (?, ?) "
+			"ON DUPLICATE KEY UPDATE last_recv_seq = GREATEST(last_recv_seq, VALUES(last_recv_seq))"
+		));
+		pstmt->setInt(1,   uid);
+		pstmt->setInt64(2, seq);
+		pstmt->executeUpdate();
+		return true;
+	}
+	catch (sql::SQLException& e) {
+		std::cerr << "UpdateMsgCursor error: " << e.what() << std::endl;
+		return false;
+	}
+}
+
+long long MysqlDao::GetMsgCursor(int uid)
+{
+	auto con = pool_->getConnection();
+	if (con == nullptr) return 0;
+	Defer defer([this, &con]() { pool_->returnConnection(std::move(con)); });
+	try {
+		std::unique_ptr<sql::PreparedStatement> pstmt(con->_con->prepareStatement(
+			"SELECT last_recv_seq FROM user_msg_cursor WHERE uid = ?"
+		));
+		pstmt->setInt(1, uid);
+		std::unique_ptr<sql::ResultSet> res(pstmt->executeQuery());
+		if (res->next()) return res->getInt64("last_recv_seq");
+		return 0;
+	}
+	catch (sql::SQLException& e) {
+		std::cerr << "GetMsgCursor error: " << e.what() << std::endl;
+		return 0;
+	}
+}

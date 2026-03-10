@@ -61,6 +61,9 @@ enum MSG_IDS {
 	ID_NOTIFY_OFF_LINE_REQ = 1021, //通知用户下线
 	ID_HEART_BEAT_REQ = 1023,      //心跳请求
 	ID_HEARTBEAT_RSP = 1024,       //心跳回复
+	ID_MSG_HISTORY_REQ = 1025,     //客户端拉历史消息（翻页）
+	ID_MSG_HISTORY_RSP = 1026,     //服务端历史消息响应
+	ID_OFFLINE_MSG_RSP = 1027,     //登录时服务端主动推未读消息
 };
 
 #define USERIPPREFIX  "uip_"
@@ -72,6 +75,7 @@ enum MSG_IDS {
 #define LOCK_PREFIX "lock_"
 #define USER_SESSION_PREFIX "usession_"
 #define LOCK_COUNT "lockcount"
+#define CONV_SEQ_PREFIX "convseq_"  //会话消息序列号前缀 convseq_<conv_id>
 
 //分布式锁的持有时间
 #define LOCK_TIME_OUT 10
